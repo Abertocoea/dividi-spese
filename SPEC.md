@@ -99,9 +99,10 @@ Una web app che gira sul mio computer. Carico il PDF, lo screenshot oppure un fi
 ### Moduli
 - **Ripartizione** (modulo puro, senza dipendenze da UI, AI o HTTP). Riceve prodotti, costi comuni, assegnazioni e criterio; restituisce per ogni persona subtotale, quota dei costi comuni e totale. Contiene le regole di calcolo e di arrotondamento.
 - **Estrazione**. Interfaccia `Estrattore` che riceve un documento (byte + tipo) e restituisce un `OrdineEstratto`. Implementazione predefinita basata su Ollama. Al suo interno:
-  - sceglie il percorso in base al documento: PDF con testo → testo estratto con PyMuPDF mantenendo il layout; PDF scansionato → pagine renderizzate in PNG a 150 dpi; immagine → inviata così com'è; CSV/Excel → letti con pandas (openpyxl per `.xlsx`, rilevamento automatico di separatore e codifica per CSV), tutti i fogli convertiti in tabella testuale e inviati sul **percorso testo**, così che sia il modello a riconoscere colonne, righe prodotto e costi comuni;
-  - chiama Ollama con `format` = JSON Schema (structured outputs), `temperature: 0`, thinking disattivato;
-  - scarta i costi comuni da 0 €.
+  - sceglie il percorso in base al documento: PDF con testo → testo estratto con PyMuPDF mantenendo il layout; PDF scansionato → pagine renderizzate in PNG a 150 dpi; immagine → inviata così com'è; CSV/Excel → letti con pandas (openpyxl per `.xlsx`, rilevamento automatico di separatore e codifica per CSV), tutti i fogli convertiti in tabella testuale (un'intestazione `## Sheet: <nome>` per foglio, celle separate da ` | `, importi formattati come nella cella così da conservare il simbolo di valuta) e inviati sul **percorso testo**, così che sia il modello a riconoscere colonne, righe prodotto e costi comuni;
+  - chiama `/api/chat` di Ollama con il system prompt in inglese (vedi sotto), il documento nel messaggio utente, `format` = JSON Schema (structured outputs), `temperature: 0`, `num_ctx: 16384` (il default di 4096 token non basta per ordini lunghi o Excel grandi), thinking disattivato;
+  - **normalizza** l'output in modo deterministico: scarta i costi comuni da 0 €; ricava il prezzo unitario da `totale_riga / quantita` quando manca; se Σ quantità × prezzo unitario non coincide con il subtotale dichiarato ma Σ prezzi sì, i prezzi erano totali di riga e vengono divisi per la quantità; la valuta mancante prende il valore predefinito (EUR).
+  - Il modello copia, il codice calcola: nessun calcolo è affidato al modello.
 - **Controllo di coerenza**: funzione pura che confronta i dati (estratti o corretti) con i totali dichiarati e restituisce le differenze.
 - **Rubrica**: persistenza dei nomi in un file locale nella cartella dati dell'utente (JSON o SQLite).
 - **Riepilogo PDF**: genera un unico documento (WeasyPrint o ReportLab) a partire dall'ordine e dal risultato della ripartizione. Struttura:
@@ -120,14 +121,15 @@ Una web app che gira sul mio computer. Carico il PDF, lo screenshot oppure un fi
 Lo stato dell'ordine in lavorazione vive nel frontend; il backend non ha sessioni.
 
 ### Forma dei dati estratti
-Validata con le prove fatte sul PDF di riferimento:
+Output del modello, validato con le prove su PDF, immagine, CSV ed Excel:
 
 ```json
 {
   "valuta": "EUR",
   "ordine": { "numero": "1000000001", "data": "2026-10-12", "venditore": "Venditore Esempio" },
   "prodotti": [
-    { "nome": "Negazione Ostinata", "quantita": 3, "prezzo_unitario": 2.50, "dettagli": "EN NM KTK U" }
+    { "nome": "Negazione Ostinata", "quantita": 3, "dettagli": "EN NM KTK U",
+      "prezzo_unitario": 2.50, "totale_riga": null }
   ],
   "costi_comuni": [
     { "descrizione": "Spese di spedizione", "importo": 11.95, "tipo": "spedizione" },
@@ -137,7 +139,35 @@ Validata con le prove fatte sul PDF di riferimento:
 }
 ```
 
-`tipo` del costo comune: `spedizione`, `commissione`, `assicurazione`, `sconto`, `altro`. Il prompt chiarisce che il prezzo da estrarre è **unitario**: nel PDF di riferimento lo è, dato che Σ quantità × prezzo = 169,20 = "Valore dell'oggetto".
+- `valuta`, i campi di `ordine`, `prezzo_unitario`, `totale_riga` e i `totali_dichiarati` possono essere `null`.
+- `tipo` del costo comune: `spedizione`, `commissione`, `assicurazione`, `sconto`, `altro`.
+- Dopo la normalizzazione ogni prodotto ha sempre un prezzo unitario: è la forma dell'`OrdineEstratto` restituito dall'API.
+
+### System prompt
+In inglese, perché i modelli piccoli seguono meglio istruzioni in inglese. Le chiavi JSON restano in italiano come nel resto del dominio. Testo validato nelle prove:
+
+```text
+You extract structured data from a purchase order, receipt or shopping cart. The input is the text of a PDF, a table converted from a CSV/Excel file, or an image.
+
+Copy values exactly as they appear in the document. Never calculate, never invent.
+
+Rules:
+- "prodotti": one entry per product line, in document order. Never merge or split lines.
+  - "quantita": the number of units on that line (integer, 1 if not shown).
+  - "nome": the product name only, without quantity or price.
+  - "dettagli": other attributes on the line (language, condition, edition, size, color, foil...), or "" if none.
+  - "prezzo_unitario": the price of one unit, if the document shows it. Otherwise null.
+  - "totale_riga": the line total, if the document shows it as a separate value or as the only price of a line labelled as a total (e.g. "Line total", "Totale riga"). Otherwise null.
+  - If a line has a single price column with no label saying it is a total, it is the unit price.
+- "totali_dichiarati": the totals printed in the document. "subtotale_prodotti" is the value of the items before charges (e.g. "Subtotal", "Valore dell'oggetto", "Items"); "totale" is the grand total paid (e.g. "Total", "Totale"). null if not shown.
+- "costi_comuni": order-level charges added on top of the items: shipping, service fees, taxes, commissions, insurance. Discounts and coupons have a NEGATIVE "importo". Skip charges of 0.
+  - "tipo": one of "spedizione", "commissione", "assicurazione", "sconto", "altro".
+  - Subtotals and totals are NEVER charges: rows like "Subtotal", "Valore dell'oggetto", "Total", "Totale" go only in "totali_dichiarati".
+- "ordine": order number, date (YYYY-MM-DD) and seller, or null if not shown.
+- "valuta": the ISO currency code only if the document shows a currency (symbol, code or column header). Otherwise null.
+- For tables, identify columns by their meaning, not their position; headers may be in any language. Summary rows usually come after the product rows.
+- Numbers are plain decimals with a dot ("1.234,56" becomes 1234.56).
+```
 
 Un'**assegnazione** lega una riga prodotto a una persona per un certo numero di unità; la somma delle unità assegnate di una riga deve essere uguale alla sua quantità.
 
@@ -155,15 +185,34 @@ Esempio di riferimento (costi comuni 12,80 €; Marco 100,00 €, Anna 69,20 €
 - parti uguali → Marco 106,40 €, Anna 75,60 €
 
 ### Modello AI
-Prove sul PDF di riferimento (14/10/2026), RTX 3060 12 GB:
+Prove del 14/10/2026 su RTX 3060 12 GB. "Corretto" = 17 righe, 24 unità, subtotale 169,20 €, costi comuni 11,95 € + 0,85 €, totale 182,00 €.
+
+Prima tornata, prompt minimo senza system prompt:
 
 | Modello | Dal testo | Dall'immagine |
 |---|---|---|
 | `qwen3.5` 4B (variante abliterated) | ✅ corretto (22 s) | ✅ corretto (16 s), con un costo spurio da 0 € |
+| `qwen3.5:9b-q4_K_M` | ✅ corretto, 2 prove su 2 (~25 s) | ✅ corretto, 2 prove su 2 (~26 s) |
 | `gemma4` e2b | ✅ corretto (28 s) | ❌ quantità errate, subtotale scambiato per costo |
 | `gemma-4` e4b (abliterated) | non provato | ❌ quantità perse, totale scambiato per costo |
 
-Modello predefinito: **Qwen 3.5**. Si sceglie tra 4B e `qwen3.5:9b-q4_K_M` (in installazione) dopo averli provati entrambi sul PDF e sullo screenshot di riferimento. Il modello resta configurabile.
+Seconda tornata, `qwen3.5:9b-q4_K_M` con system prompt e schema definitivi, contesto 16384:
+
+| Formato | Risultato |
+|---|---|
+| PDF (testo) | ✅ corretto (~30 s) |
+| Screenshot | ✅ corretto (~32 s) |
+| CSV italiano (`;`, virgola decimale, prezzo unitario) | ✅ corretto |
+| CSV inglese (`,`, solo totale di riga, nessuna valuta) | ✅ corretto **grazie alla normalizzazione**: il modello mette il totale di riga in `prezzo_unitario` |
+| Excel a due fogli | ✅ corretto |
+
+Lezioni dalle prove, già incorporate in prompt e normalizzazione:
+- se il prompt chiede al modello di dividere il totale di riga per la quantità, il modello divide anche prezzi che erano già unitari (subtotale 130,30 € invece di 169,20 €);
+- nelle tabelle le righe di riepilogo ("Valore dell'oggetto", "Subtotal") venivano prese per costi comuni finché il prompt non lo ha escluso esplicitamente;
+- senza una regola esplicita il modello inventa la valuta (`USD` per un CSV senza valuta);
+- il 9B occupa 5,6 GB di VRAM, interamente su GPU.
+
+Modello predefinito: **Qwen 3.5**. La scelta tra `qwen3.5:4b-q4_K_M` (in installazione) e `qwen3.5:9b-q4_K_M` si fa dopo aver provato anche il 4B con il prompt definitivo su tutti i formati. Il modello resta configurabile.
 
 ### Interfaccia
 - Layout a due colonne: anteprima del documento a sinistra, tabella delle righe a destra; su schermi stretti le colonne vanno una sotto l'altra.
@@ -179,9 +228,11 @@ Modello predefinito: **Qwen 3.5**. Si sceglie tra 4B e `qwen3.5:9b-q4_K_M` (in i
   - **Estrazione**: formato non supportato; Ollama non raggiungibile; modello mancante; esito del controllo di coerenza (totali corretti, subtotale sbagliato, totale sbagliato, differenze riportate); scarto dei costi da 0 €.
   - **Calcolo**: entrambi i criteri sull'esempio di riferimento; somma esatta al centesimo in casi con resti (es. 10,00 € di costi tra 3 persone); unità divise tra più persone; persone senza prodotti escluse dalle parti uguali; sconti negativi; rifiuto con unità non assegnate o assegnate in eccesso.
   - **Rubrica**: aggiunta, rinomina, eliminazione, persistenza tra un'istanza e l'altra dell'app.
-  - **Estrazione da CSV/Excel**: con l'`Estrattore` finto si verifica che il file venga accettato e convertito; la lettura reale (separatore `;` e numeri all'italiana, Excel con più fogli, file corrotto) si testa attraverso l'API con file di esempio anonimizzati.
-- **PDF**: la risposta è un PDF valido; il testo estratto contiene la sintesi (nomi, totali per persona, criterio usato) e, per ogni persona, un recap su una pagina propria con tutti e soli i suoi prodotti, compresa l'indicazione "N di M" per le righe condivise.
-- **Test lento opzionale** (escluso dalla suite normale, attivato con un marker): estrazione reale con Ollama sul PDF di riferimento e sul relativo screenshot; deve restituire 17 righe, 24 unità, subtotale 169,20 €, costi comuni 11,95 € + 0,85 €, totale 182,00 €. Serve anche per confrontare i modelli.
+  - **Estrazione da CSV/Excel**: con l'`Estrattore` finto si verifica che il file venga accettato e convertito; la lettura reale (separatore `;` e numeri all'italiana, Excel con più fogli, file corrotto) si testa attraverso l'API con i file di esempio anonimizzati.
+  - **Normalizzazione**: con l'`Estrattore` finto che restituisce output "grezzi" del modello si verifica attraverso l'API: costi da 0 € scartati, prezzo unitario ricavato da `totale_riga`, totali di riga messi per errore in `prezzo_unitario` corretti grazie al subtotale dichiarato, valuta mancante → EUR.
+  - **PDF**: la risposta è un PDF valido; il testo estratto contiene la sintesi (nomi, totali per persona, criterio usato) e, per ogni persona, un recap su una pagina propria con tutti e soli i suoi prodotti, compresa l'indicazione "N di M" per le righe condivise.
+- **Test lento opzionale** (escluso dalla suite normale, attivato con un marker): estrazione reale con Ollama su PDF, screenshot, i due CSV e l'Excel di riferimento; deve restituire 17 righe, 24 unità, subtotale 169,20 €, costi comuni 11,95 € + 0,85 €, totale 182,00 €. Serve anche per confrontare i modelli.
+- **File di esempio** in `tests/fixtures/` (anonimizzati: solo prodotti e importi, nessun nome, indirizzo o numero d'ordine): `ordine_it.csv`, `ordine_en.csv`, `ordine.xlsx` e `ordine_atteso.json` con i valori attesi. Il PDF e lo screenshot reali restano fuori da git; il test lento li cerca in una cartella locale indicata da variabile d'ambiente e si salta se mancano. Lo script che genera le copie è in `tests/fixtures/`.
 - **Prior art**: il progetto è nuovo, non ci sono test esistenti. Strumenti: pytest e il client di test di FastAPI.
 - L'interfaccia non ha test automatici in v1.
 
