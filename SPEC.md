@@ -101,7 +101,7 @@ Una web app che gira sul mio computer. Carico il PDF, lo screenshot oppure un fi
 - **Estrazione**. Interfaccia `Estrattore` che riceve un documento (byte + tipo) e restituisce un `OrdineEstratto`. Implementazione predefinita basata su Ollama. Al suo interno:
   - sceglie il percorso in base al documento: PDF con testo → testo estratto con PyMuPDF mantenendo il layout; PDF scansionato → pagine renderizzate in PNG a 150 dpi; immagine → inviata così com'è; CSV/Excel → letti con pandas (openpyxl per `.xlsx`, rilevamento automatico di separatore e codifica per CSV), tutti i fogli convertiti in tabella testuale (un'intestazione `## Sheet: <nome>` per foglio, celle separate da ` | `, importi formattati come nella cella così da conservare il simbolo di valuta) e inviati sul **percorso testo**, così che sia il modello a riconoscere colonne, righe prodotto e costi comuni;
   - chiama `/api/chat` di Ollama con il system prompt in inglese (vedi sotto), il documento nel messaggio utente, `format` = JSON Schema (structured outputs), `temperature: 0`, `num_ctx: 16384` (il default di 4096 token non basta per ordini lunghi o Excel grandi), thinking disattivato;
-  - **normalizza** l'output in modo deterministico: scarta i costi comuni da 0 €; ricava il prezzo unitario da `totale_riga / quantita` quando manca; se Σ quantità × prezzo unitario non coincide con il subtotale dichiarato ma Σ prezzi sì, i prezzi erano totali di riga e vengono divisi per la quantità; la valuta mancante prende il valore predefinito (EUR).
+  - **normalizza** l'output in modo deterministico: scarta i costi comuni da 0 €; ricava il prezzo unitario da `totale_riga / quantita` quando manca; se Σ quantità × prezzo unitario non coincide con il subtotale dichiarato ma Σ prezzi sì, i prezzi erano totali di riga e vengono divisi per la quantità; la valuta mancante prende il valore predefinito (EUR); un costo di `tipo` `sconto` con importo positivo diventa `altro`.
   - Il modello copia, il codice calcola: nessun calcolo è affidato al modello.
 - **Controllo di coerenza**: funzione pura che confronta i dati (estratti o corretti) con i totali dichiarati e restituisce le differenze.
 - **Rubrica**: persistenza dei nomi in un file locale nella cartella dati dell'utente (JSON o SQLite).
@@ -206,13 +206,18 @@ Seconda tornata, `qwen3.5:9b-q4_K_M` con system prompt e schema definitivi, cont
 | CSV inglese (`,`, solo totale di riga, nessuna valuta) | ✅ corretto **grazie alla normalizzazione**: il modello mette il totale di riga in `prezzo_unitario` |
 | Excel a due fogli | ✅ corretto |
 
+Stessa tornata con `qwen3.5:4b-q4_K_M`: importi **corretti su tutti e cinque i formati** (~22 s ciascuno, 3,6 GB di VRAM), anche il CSV inglese senza bisogno della normalizzazione. Classifica però in modo incoerente la tassa di servizio da 0,85 € (`altro`, `commissione` o `sconto` a seconda del formato), mentre il 9B la classifica sempre come `commissione`.
+
 Lezioni dalle prove, già incorporate in prompt e normalizzazione:
 - se il prompt chiede al modello di dividere il totale di riga per la quantità, il modello divide anche prezzi che erano già unitari (subtotale 130,30 € invece di 169,20 €);
 - nelle tabelle le righe di riepilogo ("Valore dell'oggetto", "Subtotal") venivano prese per costi comuni finché il prompt non lo ha escluso esplicitamente;
 - senza una regola esplicita il modello inventa la valuta (`USD` per un CSV senza valuta);
-- il 9B occupa 5,6 GB di VRAM, interamente su GPU.
+- il 9B occupa 5,6 GB di VRAM, interamente su GPU;
+- se un altro modello è ancora in memoria, Ollama carica il nuovo in parte sulla CPU e l'estrazione passa da ~22 s a 90-130 s (osservato con il 4B caricato mentre il 9B era ancora attivo).
 
-Modello predefinito: **Qwen 3.5**. La scelta tra `qwen3.5:4b-q4_K_M` (in installazione) e `qwen3.5:9b-q4_K_M` si fa dopo aver provato anche il 4B con il prompt definitivo su tutti i formati. Il modello resta configurabile.
+Modello predefinito: **`qwen3.5:9b-q4_K_M`**: gli importi sono corretti come con il 4B, ma classifica i costi in modo coerente, e costa solo ~8 s in più per estrazione. Il 4B resta l'alternativa veloce, selezionabile dalle impostazioni.
+
+Gestione della memoria GPU: quando cambia modello, l'app scarica quello precedente (`keep_alive: 0`) prima di caricare il nuovo. Dopo il caricamento controlla con `/api/ps` che il modello sia interamente su GPU e, in caso contrario, mostra un avviso sulla lentezza prevista.
 
 ### Interfaccia
 - Layout a due colonne: anteprima del documento a sinistra, tabella delle righe a destra; su schermi stretti le colonne vanno una sotto l'altra.
