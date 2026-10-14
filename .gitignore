@@ -1,0 +1,19 @@
+# Ordini reali: contengono nomi e indirizzi, mai nel repository
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.webp
+!tests/fixtures/**
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# Ambiente
+.env
