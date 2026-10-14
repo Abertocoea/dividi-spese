@@ -1,7 +1,6 @@
 """API HTTP: unico punto di ingresso del frontend."""
 from importlib.resources import files
 from pathlib import Path
-from urllib.parse import urlsplit
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
@@ -55,8 +54,12 @@ def crea_app(estrattore: Estrattore, cartella_dati: Path) -> FastAPI:
 
     @app.middleware("http")
     async def solo_dalla_pagina_dell_app(request: Request, call_next: RequestResponseEndpoint) -> Response:
+        # Origin deve coincidere esattamente (porta compresa) con l'indirizzo dell'app: un'altra app su
+        # localhost:3000 o una pagina con "Origin: null" non è la pagina dell'app.
         origine = request.headers.get("origin")
-        if origine is not None and urlsplit(origine).hostname not in HOST_LOCALI:
+        propria = f"{request.url.scheme}://{request.headers.get('host', '')}"
+        da_altro_sito = request.headers.get("sec-fetch-site") in ("cross-site", "same-site")
+        if (origine is not None and origine != propria) or da_altro_sito:
             return JSONResponse({"detail": "Richiesta da un altro sito rifiutata"}, status_code=403)
         return await call_next(request)
 
