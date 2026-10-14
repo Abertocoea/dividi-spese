@@ -4,6 +4,9 @@
 *.jpg
 *.jpeg
 *.webp
+*.csv
+*.xlsx
+*.xls
 !tests/fixtures/**
 
 # Python
