@@ -1,0 +1,41 @@
+[project]
+name = "dividi-spese"
+version = "0.1.0"
+description = "Web app locale per dividere le spese di un ordine online con un modello AI locale (Ollama)"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "python-multipart",
+    "httpx",
+    "pymupdf",
+    "openpyxl",
+    "reportlab",
+    "pydantic>=2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "mypy", "types-reportlab"]
+
+[project.scripts]
+dividi-spese = "dividi_spese.__main__:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.package-data]
+dividi_spese = ["static/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["lento: estrazione reale con Ollama (esegui con -m lento)"]
+addopts = "-m 'not lento'"
+
+[tool.mypy]
+strict = true
+files = ["src"]
+
+[[tool.mypy.overrides]]
+module = ["fitz", "pymupdf", "openpyxl", "openpyxl.*"]
+ignore_missing_imports = true

@@ -20,3 +20,6 @@ build/
 
 # Ambiente
 .env
+
+# Screenshot dei test nel browser (possono mostrare ordini reali)
+.playwright-mcp/

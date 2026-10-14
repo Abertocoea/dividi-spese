@@ -1,0 +1,624 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dividi Spese</title>
+<link rel="icon" href="data:,">
+<style>
+:root {
+  --bg: #f6f5f2; --pannello: #ffffff; --testo: #1d1d1b; --tenue: #6b6a66; --bordo: #e2e0da;
+  --accento: #2f5d50; --accento-chiaro: #e3eeea; --errore: #a83a2b; --errore-chiaro: #f8e6e2;
+  --ok: #2f6b3a; --ok-chiaro: #e4f1e5; --attenzione: #8a6100; --attenzione-chiaro: #fbf0d6;
+  --raggio: 8px; --ombra: 0 1px 2px rgba(0,0,0,.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161716; --pannello: #1f201f; --testo: #ecebe7; --tenue: #a09e98; --bordo: #33342f;
+    --accento: #7fbfa9; --accento-chiaro: #22342e; --errore: #f08a7a; --errore-chiaro: #3a2320;
+    --ok: #8fd19a; --ok-chiaro: #1f3322; --attenzione: #e8c25e; --attenzione-chiaro: #3a3018;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--testo); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; padding: 12px 20px; border-bottom: 1px solid var(--bordo); background: var(--pannello); }
+header h1 { font-size: 18px; margin: 0; letter-spacing: -.01em; }
+header h1 span { color: var(--accento); }
+main { padding: 16px 20px 40px; max-width: 1500px; margin: 0 auto; }
+button, select, input { font: inherit; color: inherit; }
+button { cursor: pointer; border: 1px solid var(--bordo); background: var(--pannello); border-radius: 6px; padding: 5px 10px; }
+button:hover:not(:disabled) { border-color: var(--accento); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button.primario { background: var(--accento); border-color: var(--accento); color: var(--pannello); font-weight: 600; }
+button.piccolo { padding: 1px 7px; font-size: 12px; }
+button.link { border: none; background: none; color: var(--tenue); padding: 2px 4px; }
+button.link:hover { color: var(--errore); }
+input, select { border: 1px solid var(--bordo); background: var(--pannello); border-radius: 6px; padding: 4px 7px; }
+input:focus, select:focus, button:focus-visible { outline: 2px solid var(--accento); outline-offset: 1px; }
+.pannello { background: var(--pannello); border: 1px solid var(--bordo); border-radius: var(--raggio); box-shadow: var(--ombra); padding: 14px 16px; margin-bottom: 14px; }
+.pannello h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--tenue); margin: 0 0 10px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.tenue { color: var(--tenue); }
+.nascosto { display: none !important; }
+
+#caricamento { border: 2px dashed var(--bordo); border-radius: var(--raggio); padding: 36px 20px; text-align: center; background: var(--pannello); transition: border-color .15s, background .15s; }
+#caricamento.sopra { border-color: var(--accento); background: var(--accento-chiaro); }
+#caricamento strong { font-size: 16px; display: block; margin-bottom: 6px; }
+#caricamento.compatto { padding: 10px 14px; display: flex; gap: 12px; align-items: center; justify-content: space-between; text-align: left; flex-wrap: wrap; }
+#caricamento.compatto strong { font-size: 14px; display: inline; margin: 0; }
+
+.griglia { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 16px; margin-top: 14px; align-items: start; }
+@media (max-width: 1000px) { .griglia { grid-template-columns: 1fr; } }
+#anteprima { position: sticky; top: 12px; }
+#anteprima iframe, #anteprima img { width: 100%; height: 78vh; border: 1px solid var(--bordo); border-radius: 6px; background: #fff; object-fit: contain; }
+@media (max-width: 1000px) { #anteprima { position: static; } #anteprima iframe, #anteprima img { height: 50vh; } }
+.tabella-anteprima { max-height: 78vh; overflow: auto; }
+.tabella-anteprima h3 { font-size: 13px; margin: 10px 0 4px; }
+
+.banner { border-radius: 6px; padding: 9px 12px; margin-bottom: 14px; border: 1px solid transparent; }
+.banner.ok { background: var(--ok-chiaro); color: var(--ok); }
+.banner.errore { background: var(--errore-chiaro); color: var(--errore); }
+.banner.attenzione { background: var(--attenzione-chiaro); color: var(--attenzione); }
+.banner ul { margin: 4px 0 0; padding-left: 18px; }
+
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; font-size: 12px; font-weight: 600; color: var(--tenue); padding: 4px 6px; border-bottom: 1px solid var(--bordo); white-space: nowrap; }
+td { padding: 5px 6px; border-bottom: 1px solid var(--bordo); vertical-align: top; }
+td.num, th.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+tr.da-assegnare td:first-child { box-shadow: inset 3px 0 0 var(--attenzione); }
+td input.nome { width: 100%; min-width: 120px; }
+td input.dettagli { width: 100%; min-width: 80px; font-size: 12px; color: var(--tenue); }
+td input.qta { width: 52px; text-align: right; }
+td input.prezzo { width: 78px; text-align: right; }
+.scorri { overflow-x: auto; }
+
+.persone { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.chip { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; padding: 2px 10px; font-size: 13px; font-weight: 500; border: 1px solid transparent; white-space: nowrap; }
+.chip button { border: none; background: none; padding: 0 0 0 2px; color: inherit; opacity: .6; }
+.chip button:hover { opacity: 1; }
+button.chip { cursor: pointer; background: transparent; border: 1px dashed var(--bordo); color: var(--tenue); }
+button.chip.attivo { border-style: solid; }
+.assegna { display: flex; flex-wrap: wrap; gap: 4px; }
+.divisione { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 4px; }
+.stepper { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; }
+.stepper button { padding: 0 6px; line-height: 1.3; }
+.contatore { font-variant-numeric: tabular-nums; }
+
+.barra { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin-top: 10px; }
+.criterio label { margin-right: 12px; cursor: pointer; }
+.totali-persona { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.totali-persona .chip { font-variant-numeric: tabular-nums; }
+#risultato table td.totale { font-weight: 700; }
+#stato-estrazione { display: flex; align-items: center; gap: 10px; }
+.spinner { width: 16px; height: 16px; border: 2px solid var(--bordo); border-top-color: var(--accento); border-radius: 50%; animation: gira 0.8s linear infinite; }
+@keyframes gira { to { transform: rotate(360deg); } }
+#rubrica-elenco li { display: flex; gap: 6px; align-items: center; padding: 3px 0; }
+#rubrica-elenco { list-style: none; margin: 0; padding: 0; max-height: 240px; overflow: auto; }
+dialog { border: 1px solid var(--bordo); border-radius: var(--raggio); background: var(--pannello); color: var(--testo); min-width: 300px; }
+dialog::backdrop { background: rgba(0,0,0,.3); }
+#messaggio { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); max-width: min(560px, calc(100% - 32px)); z-index: 10; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Dividi <span>Spese</span></h1>
+  <div class="persone">
+    <label for="modello" class="tenue">Modello</label>
+    <select id="modello" aria-label="Modello AI"><option value="">caricamento…</option></select>
+    <button id="apri-rubrica" type="button">Rubrica</button>
+  </div>
+</header>
+
+<main>
+  <div id="caricamento">
+    <div>
+      <strong id="caricamento-titolo">Trascina qui l'ordine</strong>
+      <span class="tenue" id="caricamento-sotto">PDF, screenshot (PNG, JPG, WebP), CSV o Excel</span>
+    </div>
+    <div style="margin-top:10px" id="caricamento-azioni">
+      <label><input type="file" id="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.csv,.xlsx" hidden><button type="button" onclick="document.getElementById('file').click()">Scegli file…</button></label>
+      <button type="button" id="riprova" class="nascosto">Riprova estrazione</button>
+    </div>
+  </div>
+
+  <div id="stato-estrazione" class="pannello nascosto" role="status"><div class="spinner"></div><span id="stato-testo">Estrazione in corso…</span></div>
+
+  <div class="griglia nascosto" id="lavoro">
+    <section id="anteprima" class="pannello" aria-label="Anteprima del documento"></section>
+
+    <section>
+      <div id="avvisi"></div>
+      <div id="coerenza" class="banner" role="status"></div>
+
+      <div class="pannello">
+        <h2>Persone</h2>
+        <div class="persone" id="persone"></div>
+        <form id="nuova-persona" class="persone" style="margin-top:8px">
+          <input id="nome-persona" list="nomi-rubrica" placeholder="Nome (dalla rubrica o nuovo)" autocomplete="off" aria-label="Nome persona">
+          <datalist id="nomi-rubrica"></datalist>
+          <button type="submit">Aggiungi</button>
+        </form>
+      </div>
+
+      <div class="pannello">
+        <h2><span>Prodotti</span><span id="da-assegnare" class="contatore"></span></h2>
+        <div id="assegna-selezionati" class="barra nascosto" style="margin:0 0 8px">
+          <span><span id="n-selezionati"></span> selezionati — assegna a:</span>
+          <div class="assegna" id="assegna-selezionati-persone"></div>
+        </div>
+        <div class="scorri">
+          <table>
+            <thead><tr>
+              <th><input type="checkbox" id="seleziona-tutti" aria-label="Seleziona tutti"></th>
+              <th class="num">Qtà</th><th>Prodotto</th><th class="num">Prezzo</th><th class="num">Totale</th><th>Assegnato a</th><th></th>
+            </tr></thead>
+            <tbody id="prodotti"></tbody>
+          </table>
+        </div>
+        <div class="barra"><button type="button" id="aggiungi-prodotto">+ Aggiungi prodotto</button><span class="tenue" id="subtotale"></span></div>
+      </div>
+
+      <div class="pannello">
+        <h2>Costi comuni</h2>
+        <table>
+          <thead><tr><th>Descrizione</th><th>Tipo</th><th class="num">Importo</th><th></th></tr></thead>
+          <tbody id="costi"></tbody>
+        </table>
+        <div class="barra"><button type="button" id="aggiungi-costo">+ Aggiungi costo</button><span class="tenue" id="totale-costi"></span></div>
+      </div>
+
+      <div class="pannello">
+        <h2>Divisione</h2>
+        <div class="criterio" role="radiogroup" aria-label="Criterio di ripartizione dei costi comuni">
+          <span class="tenue">Costi comuni:</span>
+          <label><input type="radio" name="criterio" value="proporzionale" checked> in proporzione alla spesa</label>
+          <label><input type="radio" name="criterio" value="parti_uguali"> in parti uguali</label>
+        </div>
+        <div class="totali-persona" id="parziali"></div>
+        <div class="barra">
+          <span class="tenue" id="motivo-calcola"></span>
+          <span><button type="button" id="calcola" class="primario" disabled>Calcola</button>
+          <button type="button" id="esporta" disabled>Esporta PDF</button></span>
+        </div>
+        <div id="risultato" class="nascosto" style="margin-top:12px"></div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<dialog id="rubrica">
+  <h2 style="font-size:16px;margin:0 0 10px">Rubrica</h2>
+  <ul id="rubrica-elenco"></ul>
+  <p class="tenue" id="rubrica-vuota">Nessun nome salvato. I nomi aggiunti a un ordine vengono salvati qui.</p>
+  <div class="barra"><span></span><button type="button" onclick="this.closest('dialog').close()">Chiudi</button></div>
+</dialog>
+
+<div id="messaggio"></div>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const COLORI = [["#dce9f9", "#1d4f8a"], ["#f9e1dc", "#8a2e1d"], ["#e0f2dc", "#2f6b1d"], ["#f4e3f7", "#6e2a80"], ["#fbefd4", "#7a5600"], ["#dcf2f1", "#1d6b68"], ["#ece6dc", "#5c4a2e"], ["#f9dceb", "#8a1d55"]];
+const COLORI_SCURI = [["#1d3550", "#a9cbf2"], ["#4a2620", "#f2b3a5"], ["#25401f", "#b3e3a5"], ["#3d2545", "#e0b3ec"], ["#45391a", "#f0d58f"], ["#1d3f3e", "#a5e3e0"], ["#3a3326", "#d9c9ad"], ["#45213a", "#f2a9cf"]];
+const scuro = matchMedia("(prefers-color-scheme: dark)");
+
+const stato = {
+  file: null,
+  ordine: null,          // OrdineEstratto; ogni prodotto ha anche `assegnazioni: {persona: unità}`
+  persone: [],
+  colori: new Map(),      // persona → indice colore, stabile anche se altre persone vengono tolte
+  rubrica: [],
+  selezionati: new Set(),
+  risultato: null,
+};
+
+// ---------- utilità ----------
+const fmt = new Intl.NumberFormat("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const euro = (v) => fmt.format(Number(v)) + " €";
+const centesimi = (v) => Math.round(Number(v) * 100);
+const totaleRiga = (unita, prezzo) => Math.round(unita * Number(prezzo) * 100); // in centesimi
+function numero(testo) {
+  // accetta "1.234,56", "1234,56" e "1234.56"
+  let t = String(testo).trim().replace(/\s|€/g, "");
+  if (t.includes(",")) t = t.replace(/\./g, "").replace(",", ".");
+  const n = Number(t);
+  return Number.isFinite(n) ? n.toFixed(2) : null;
+}
+function colore(nome) {
+  if (!stato.colori.has(nome)) stato.colori.set(nome, stato.colori.size);
+  const i = stato.colori.get(nome) % COLORI.length;
+  return (scuro.matches ? COLORI_SCURI : COLORI)[i];
+}
+function chip(nome, extra) {
+  const el = document.createElement("span");
+  el.className = "chip";
+  const [sfondo, testo] = colore(nome);
+  el.style.background = sfondo; el.style.color = testo;
+  el.append(nome);
+  if (extra) el.append(extra);
+  return el;
+}
+function el(tag, attrs = {}, ...figli) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else if (k === "class") e.className = v;
+    else if (v !== false && v != null) e.setAttribute(k, v === true ? "" : v);
+  }
+  e.append(...figli.filter((f) => f != null));
+  return e;
+}
+function messaggio(testo, tipo = "errore") {
+  const box = el("div", { class: `banner ${tipo}`, role: "alert" }, testo);
+  $("messaggio").replaceChildren(box);
+  setTimeout(() => box.remove(), 8000);
+}
+async function api(percorso, opzioni = {}) {
+  const r = await fetch(percorso, opzioni);
+  if (!r.ok) {
+    let dettaglio = r.statusText;
+    try { const d = await r.json(); dettaglio = typeof d.detail === "string" ? d.detail : JSON.stringify(d.detail); } catch {}
+    throw new Error(dettaglio);
+  }
+  return r;
+}
+const json = (corpo) => ({ method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corpo) });
+
+// ---------- modelli e rubrica ----------
+async function caricaModelli() {
+  try {
+    const { modelli, predefinito } = await (await api("/modelli")).json();
+    const salvato = (() => { try { return localStorage.getItem("modello"); } catch { return null; } })();
+    $("modello").replaceChildren(...modelli.map((m) => el("option", { value: m, selected: m === (modelli.includes(salvato) ? salvato : predefinito) }, m === predefinito ? `${m} (predefinito)` : m)));
+    if (!modelli.length) $("modello").replaceChildren(el("option", { value: "" }, "nessun modello con visione"));
+  } catch (e) {
+    $("modello").replaceChildren(el("option", { value: "" }, "Ollama non raggiungibile"));
+    messaggio(e.message);
+  }
+}
+$("modello").addEventListener("change", () => { try { localStorage.setItem("modello", $("modello").value); } catch {} });
+
+async function caricaRubrica() {
+  stato.rubrica = (await (await api("/rubrica")).json()).nomi;
+  disegnaRubrica();
+}
+function disegnaRubrica() {
+  $("nomi-rubrica").replaceChildren(...stato.rubrica.filter((n) => !stato.persone.includes(n)).map((n) => el("option", { value: n })));
+  $("rubrica-vuota").classList.toggle("nascosto", stato.rubrica.length > 0);
+  $("rubrica-elenco").replaceChildren(...stato.rubrica.map((nome) => {
+    const input = el("input", { value: nome, "aria-label": `Rinomina ${nome}` });
+    const salva = async () => {
+      const nuovo = input.value.trim();
+      if (!nuovo || nuovo === nome) { input.value = nome; return; }
+      try {
+        stato.rubrica = (await (await api(`/rubrica/${encodeURIComponent(nome)}`, { ...json({ nome: nuovo }), method: "PUT" })).json()).nomi;
+        rinominaPersona(nome, nuovo);
+        disegnaRubrica();
+      } catch (e) { messaggio(e.message); }
+    };
+    input.addEventListener("change", salva);
+    return el("li", {}, input, el("button", { class: "link", type: "button", title: "Elimina dalla rubrica", onclick: async () => {
+      try {
+        stato.rubrica = (await (await api(`/rubrica/${encodeURIComponent(nome)}`, { method: "DELETE" })).json()).nomi;
+        disegnaRubrica();
+      } catch (e) { messaggio(e.message); }
+    } }, "Elimina"));
+  }));
+}
+$("apri-rubrica").addEventListener("click", () => $("rubrica").showModal());
+
+// ---------- caricamento ed estrazione ----------
+const zona = $("caricamento");
+["dragenter", "dragover"].forEach((t) => zona.addEventListener(t, (e) => { e.preventDefault(); zona.classList.add("sopra"); }));
+["dragleave", "drop"].forEach((t) => zona.addEventListener(t, (e) => { e.preventDefault(); zona.classList.remove("sopra"); }));
+zona.addEventListener("drop", (e) => { if (e.dataTransfer.files[0]) carica(e.dataTransfer.files[0]); });
+$("file").addEventListener("change", (e) => { if (e.target.files[0]) carica(e.target.files[0]); e.target.value = ""; });
+$("riprova").addEventListener("click", () => stato.file && carica(stato.file));
+
+async function carica(file) {
+  stato.file = file;
+  const dati = new FormData();
+  dati.append("file", file);
+  if ($("modello").value) dati.append("modello", $("modello").value);
+  const inizio = Date.now();
+  $("stato-estrazione").classList.remove("nascosto");
+  const timer = setInterval(() => { $("stato-testo").textContent = `Estrazione di ${file.name} con ${$("modello").value || "il modello predefinito"}… ${Math.round((Date.now() - inizio) / 1000)} s`; }, 250);
+  try {
+    const risposta = await (await api("/estrai", { method: "POST", body: dati })).json();
+    for (const p of risposta.ordine.prodotti) p.assegnazioni = {};
+    stato.ordine = risposta.ordine;
+    stato.selezionati.clear();
+    stato.risultato = null;
+    disegnaAnteprima(file, risposta.anteprima);
+    $("avvisi").replaceChildren(...risposta.avvisi.map((a) => el("div", { class: "banner attenzione" }, a)));
+    zona.classList.add("compatto");
+    $("caricamento-titolo").textContent = file.name;
+    $("caricamento-sotto").textContent = ` · estratto in ${Math.round((Date.now() - inizio) / 1000)} s · trascina un altro file per ricominciare`;
+    $("riprova").classList.remove("nascosto");
+    $("lavoro").classList.remove("nascosto");
+    disegna();
+    aggiornaCoerenza(risposta.coerenza);
+  } catch (e) {
+    messaggio(e.message);
+  } finally {
+    clearInterval(timer);
+    $("stato-estrazione").classList.add("nascosto");
+  }
+}
+
+function disegnaAnteprima(file, fogli) {
+  const box = $("anteprima");
+  const url = URL.createObjectURL(file);
+  if (fogli.length) {
+    box.replaceChildren(el("div", { class: "tabella-anteprima" }, ...fogli.flatMap((f) => [
+      el("h3", {}, f.nome),
+      el("table", {}, ...f.righe.map((r, i) => el("tr", {}, ...r.map((c) => el(i === 0 ? "th" : "td", {}, c))))),
+    ])));
+  } else if (/\.pdf$/i.test(file.name)) {
+    box.replaceChildren(el("iframe", { src: url, title: "Anteprima PDF" }));
+  } else {
+    box.replaceChildren(el("img", { src: url, alt: "Anteprima dell'ordine" }));
+  }
+}
+
+// ---------- persone ----------
+$("nuova-persona").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const nome = $("nome-persona").value.trim();
+  if (!nome) return;
+  if (!stato.persone.includes(nome)) stato.persone.push(nome);
+  $("nome-persona").value = "";
+  try { stato.rubrica = (await (await api("/rubrica", json({ nome }))).json()).nomi; } catch (err) { messaggio(err.message); }
+  disegnaRubrica();
+  disegna();
+});
+function rimuoviPersona(nome) {
+  stato.persone = stato.persone.filter((p) => p !== nome);
+  for (const p of stato.ordine.prodotti) delete p.assegnazioni[nome];
+  modificato();
+}
+function rinominaPersona(vecchio, nuovo) {
+  if (!stato.persone.includes(vecchio)) return;
+  stato.persone = stato.persone.map((p) => (p === vecchio ? nuovo : p));
+  stato.colori.set(nuovo, stato.colori.get(vecchio));
+  for (const p of stato.ordine?.prodotti ?? []) {
+    if (vecchio in p.assegnazioni) { p.assegnazioni[nuovo] = p.assegnazioni[vecchio]; delete p.assegnazioni[vecchio]; }
+  }
+  modificato();
+}
+
+// ---------- assegnazioni ----------
+const assegnate = (p) => Object.values(p.assegnazioni).reduce((a, b) => a + b, 0);
+function assegnaTutto(p, nome) {
+  const giaSuo = p.assegnazioni[nome] === p.quantita;
+  p.assegnazioni = giaSuo ? {} : { [nome]: p.quantita };
+}
+function cambiaUnita(p, nome, delta) {
+  const nuovo = (p.assegnazioni[nome] || 0) + delta;
+  if (nuovo < 0 || assegnate(p) + delta > p.quantita) return;
+  if (nuovo === 0) delete p.assegnazioni[nome]; else p.assegnazioni[nome] = nuovo;
+  modificato();
+}
+
+// ---------- disegno ----------
+function disegna() {
+  if (!stato.ordine) return;
+  disegnaPersone();
+  disegnaProdotti();
+  disegnaCosti();
+  disegnaDivisione();
+}
+
+function disegnaPersone() {
+  $("persone").replaceChildren(...(stato.persone.length ? stato.persone.map((n) =>
+    chip(n, el("button", { type: "button", title: `Togli ${n} dall'ordine`, "aria-label": `Togli ${n}`, onclick: () => rimuoviPersona(n) }, "×"))
+  ) : [el("span", { class: "tenue" }, "Aggiungi le persone che partecipano all'ordine.")]));
+  disegnaRubrica();
+}
+
+function pulsantePersona(nome, attivo, onclick) {
+  const [sfondo, testo] = colore(nome);
+  const b = el("button", { type: "button", class: `chip${attivo ? " attivo" : ""}`, onclick, "aria-pressed": attivo ? "true" : "false" }, nome);
+  if (attivo) { b.style.background = sfondo; b.style.color = testo; b.style.borderColor = testo; }
+  return b;
+}
+
+function disegnaProdotti() {
+  const righe = stato.ordine.prodotti.map((p, i) => {
+    const mancanti = p.quantita - assegnate(p);
+    const condivisa = Object.keys(p.assegnazioni).length > 1 || (mancanti > 0 && assegnate(p) > 0);
+    const assegna = el("div", { class: "assegna" }, ...stato.persone.map((n) =>
+      pulsantePersona(n, p.assegnazioni[n] === p.quantita, () => { assegnaTutto(p, n); modificato(); })
+    ));
+    let divisione = null;
+    if (p.quantita > 1 && stato.persone.length > 1) {
+      const aperta = condivisa || p._dividi;
+      divisione = aperta
+        ? el("div", { class: "divisione" }, ...stato.persone.map((n) => el("span", { class: "stepper" },
+            el("button", { type: "button", class: "piccolo", "aria-label": `Una unità in meno a ${n}`, onclick: () => cambiaUnita(p, n, -1) }, "−"),
+            chip(n, ` ${p.assegnazioni[n] || 0}`),
+            el("button", { type: "button", class: "piccolo", "aria-label": `Una unità in più a ${n}`, onclick: () => cambiaUnita(p, n, +1) }, "+"),
+          )), mancanti ? el("span", { class: "tenue" }, `${mancanti} da assegnare`) : null)
+        : el("button", { type: "button", class: "link", onclick: () => { p._dividi = true; disegnaProdotti(); } }, `dividi le ${p.quantita} unità`);
+    }
+    const qta = el("input", { class: "qta", type: "number", min: 1, step: 1, value: p.quantita, "aria-label": "Quantità" });
+    qta.addEventListener("change", () => {
+      const q = Math.max(1, parseInt(qta.value, 10) || 1);
+      p.quantita = q;
+      if (assegnate(p) > q) p.assegnazioni = {};
+      modificato();
+    });
+    const nome = el("input", { class: "nome", value: p.nome, "aria-label": "Nome prodotto" });
+    nome.addEventListener("change", () => { p.nome = nome.value; modificato(false); });
+    const dettagli = el("input", { class: "dettagli", value: p.dettagli, placeholder: "dettagli", "aria-label": "Dettagli" });
+    dettagli.addEventListener("change", () => { p.dettagli = dettagli.value; modificato(false); });
+    const prezzo = el("input", { class: "prezzo", value: fmt.format(p.prezzo_unitario), inputmode: "decimal", "aria-label": "Prezzo unitario" });
+    prezzo.addEventListener("change", () => {
+      const v = numero(prezzo.value);
+      if (v === null) { prezzo.value = fmt.format(p.prezzo_unitario); return; }
+      p.prezzo_unitario = v; modificato();
+    });
+    const selez = el("input", { type: "checkbox", checked: stato.selezionati.has(p), "aria-label": `Seleziona ${p.nome}` });
+    selez.addEventListener("change", () => { selez.checked ? stato.selezionati.add(p) : stato.selezionati.delete(p); disegnaSelezione(); });
+    return el("tr", { class: mancanti ? "da-assegnare" : "" },
+      el("td", {}, selez),
+      el("td", { class: "num" }, qta),
+      el("td", {}, nome, dettagli),
+      el("td", { class: "num" }, prezzo),
+      el("td", { class: "num" }, euro(p.quantita * p.prezzo_unitario)),
+      el("td", {}, stato.persone.length ? assegna : el("span", { class: "tenue" }, "aggiungi persone"), divisione),
+      el("td", { class: "num" },
+        el("button", { type: "button", class: "link", title: "Sposta tra i costi comuni", onclick: () => prodottoACosto(i) }, "→ costo"),
+        el("button", { type: "button", class: "link", title: "Elimina riga", "aria-label": `Elimina ${p.nome}`, onclick: () => { stato.selezionati.delete(p); stato.ordine.prodotti.splice(i, 1); modificato(); } }, "×")),
+    );
+  });
+  $("prodotti").replaceChildren(...righe);
+  const unita = stato.ordine.prodotti.reduce((a, p) => a + p.quantita, 0);
+  const mancanti = stato.ordine.prodotti.reduce((a, p) => a + p.quantita - assegnate(p), 0);
+  $("da-assegnare").textContent = mancanti ? `${mancanti} di ${unita} unità da assegnare` : `tutte le ${unita} unità assegnate ✓`;
+  $("subtotale").textContent = `Subtotale prodotti: ${euro(stato.ordine.prodotti.reduce((a, p) => a + totaleRiga(p.quantita, p.prezzo_unitario), 0) / 100)}`;
+  disegnaSelezione();
+}
+
+function disegnaSelezione() {
+  const n = stato.selezionati.size;
+  $("assegna-selezionati").classList.toggle("nascosto", n === 0 || !stato.persone.length);
+  $("n-selezionati").textContent = n;
+  $("seleziona-tutti").checked = n > 0 && n === stato.ordine.prodotti.length;
+  $("assegna-selezionati-persone").replaceChildren(...stato.persone.map((nome) => pulsantePersona(nome, false, () => {
+    for (const p of stato.selezionati) p.assegnazioni = { [nome]: p.quantita };
+    stato.selezionati.clear();
+    modificato();
+  })));
+}
+$("seleziona-tutti").addEventListener("change", (e) => {
+  stato.selezionati = e.target.checked ? new Set(stato.ordine.prodotti) : new Set();
+  disegnaProdotti();
+});
+$("aggiungi-prodotto").addEventListener("click", () => {
+  stato.ordine.prodotti.push({ nome: "Nuovo prodotto", quantita: 1, dettagli: "", prezzo_unitario: "0.00", assegnazioni: {} });
+  modificato();
+});
+
+function prodottoACosto(i) {
+  const [p] = stato.ordine.prodotti.splice(i, 1);
+  stato.selezionati.delete(p);
+  stato.ordine.costi_comuni.push({ descrizione: p.nome, importo: (totaleRiga(p.quantita, p.prezzo_unitario) / 100).toFixed(2), tipo: "altro" });
+  modificato();
+}
+function costoAProdotto(i) {
+  const [c] = stato.ordine.costi_comuni.splice(i, 1);
+  stato.ordine.prodotti.push({ nome: c.descrizione, quantita: 1, dettagli: "", prezzo_unitario: c.importo, assegnazioni: {} });
+  modificato();
+}
+
+const TIPI = { spedizione: "Spedizione", commissione: "Commissione", assicurazione: "Assicurazione", sconto: "Sconto", altro: "Altro" };
+function disegnaCosti() {
+  $("costi").replaceChildren(...stato.ordine.costi_comuni.map((c, i) => {
+    const descr = el("input", { class: "nome", value: c.descrizione, "aria-label": "Descrizione" });
+    descr.addEventListener("change", () => { c.descrizione = descr.value; modificato(false); });
+    const tipo = el("select", { "aria-label": "Tipo di costo" }, ...Object.entries(TIPI).map(([v, t]) => el("option", { value: v, selected: v === c.tipo }, t)));
+    tipo.addEventListener("change", () => { c.tipo = tipo.value; modificato(false); });
+    const importo = el("input", { class: "prezzo", value: fmt.format(c.importo), inputmode: "decimal", "aria-label": "Importo" });
+    importo.addEventListener("change", () => {
+      const v = numero(importo.value);
+      if (v === null) { importo.value = fmt.format(c.importo); return; }
+      c.importo = v; modificato();
+    });
+    return el("tr", {},
+      el("td", {}, descr), el("td", {}, tipo), el("td", { class: "num" }, importo),
+      el("td", { class: "num" },
+        el("button", { type: "button", class: "link", title: "Sposta tra i prodotti", onclick: () => costoAProdotto(i) }, "→ prodotto"),
+        el("button", { type: "button", class: "link", "aria-label": `Elimina ${c.descrizione}`, onclick: () => { stato.ordine.costi_comuni.splice(i, 1); modificato(); } }, "×")));
+  }));
+  $("totale-costi").textContent = `Totale costi comuni: ${euro(stato.ordine.costi_comuni.reduce((a, c) => a + centesimi(c.importo), 0) / 100)}`;
+}
+$("aggiungi-costo").addEventListener("click", () => {
+  stato.ordine.costi_comuni.push({ descrizione: "Nuovo costo", importo: "0.00", tipo: "altro" });
+  modificato();
+});
+
+function disegnaDivisione() {
+  const parziali = new Map(stato.persone.map((n) => [n, 0]));
+  for (const p of stato.ordine.prodotti) for (const [n, u] of Object.entries(p.assegnazioni)) parziali.set(n, (parziali.get(n) || 0) + totaleRiga(u, p.prezzo_unitario));
+  $("parziali").replaceChildren(...[...parziali].map(([n, c]) => chip(n, `: ${euro(c / 100)} di prodotti`)));
+  const mancanti = stato.ordine.prodotti.reduce((a, p) => a + p.quantita - assegnate(p), 0);
+  const motivo = !stato.ordine.prodotti.length ? "Nessun prodotto." : mancanti ? `Assegna ancora ${mancanti} unità per calcolare.` : "";
+  $("motivo-calcola").textContent = motivo;
+  $("calcola").disabled = Boolean(motivo);
+  $("esporta").disabled = Boolean(motivo);
+  $("risultato").classList.toggle("nascosto", !stato.risultato);
+}
+
+// ---------- coerenza ----------
+function aggiornaCoerenza(c) {
+  const box = $("coerenza");
+  if (c.ok === null) {
+    box.className = "banner attenzione";
+    box.textContent = `Il documento non riporta subtotale né totale: controlla a mano le righe. Totale calcolato ${euro(c.totale_calcolato)}.`;
+    return;
+  }
+  if (c.ok) {
+    box.className = "banner ok";
+    box.textContent = `I totali tornano: prodotti ${euro(c.subtotale_calcolato)}, totale ${euro(c.totale_calcolato)}.`;
+    return;
+  }
+  box.className = "banner errore";
+  const voci = [];
+  if (c.differenza_subtotale !== null && Number(c.differenza_subtotale) !== 0)
+    voci.push(`Prodotti: calcolati ${euro(c.subtotale_calcolato)}, nel documento ${euro(c.subtotale_dichiarato)} (differenza ${euro(c.differenza_subtotale)}).`);
+  if (c.differenza_totale !== null && Number(c.differenza_totale) !== 0)
+    voci.push(`Totale: calcolato ${euro(c.totale_calcolato)}, nel documento ${euro(c.totale_dichiarato)} (differenza ${euro(c.differenza_totale)}).`);
+  box.replaceChildren("I totali non tornano: correggi le righe o riprova l'estrazione con un altro modello.", el("ul", {}, ...voci.map((v) => el("li", {}, v))));
+}
+
+const ordinePerApi = () => ({ ...stato.ordine, prodotti: stato.ordine.prodotti.map(({ assegnazioni, _dividi, ...p }) => p) });
+let attesaVerifica;
+function modificato(ricontrolla = true) {
+  stato.risultato = null;
+  $("risultato").classList.add("nascosto");
+  disegna();
+  if (!ricontrolla) return;
+  clearTimeout(attesaVerifica);
+  attesaVerifica = setTimeout(async () => {
+    try { aggiornaCoerenza(await (await api("/verifica", json(ordinePerApi()))).json()); } catch (e) { messaggio(e.message); }
+  }, 250);
+}
+
+// ---------- calcolo ed esportazione ----------
+function richiesta() {
+  return {
+    ordine: ordinePerApi(),
+    // ordinate per persona, così risultati e PDF seguono l'ordine in cui le persone sono state aggiunte
+    assegnazioni: stato.persone.flatMap((persona) => stato.ordine.prodotti.flatMap((p, riga) => p.assegnazioni[persona] ? [{ riga, persona, unita: p.assegnazioni[persona] }] : [])),
+    criterio: document.querySelector("input[name=criterio]:checked").value,
+  };
+}
+async function calcola() {
+  try {
+    const r = await (await api("/calcola", json(richiesta()))).json();
+    stato.risultato = r;
+    $("risultato").replaceChildren(el("table", {},
+      el("thead", {}, el("tr", {}, el("th", {}, "Persona"), el("th", { class: "num" }, "Prodotti"), el("th", { class: "num" }, "Costi comuni"), el("th", { class: "num" }, "Da pagare"))),
+      el("tbody", {}, ...r.persone.map((p) => el("tr", {},
+        el("td", {}, chip(p.nome)), el("td", { class: "num" }, euro(p.subtotale)), el("td", { class: "num" }, euro(p.quota_costi_comuni)), el("td", { class: "num totale" }, euro(p.totale)))),
+        el("tr", {}, el("td", {}, el("strong", {}, "Totale")), el("td", { class: "num" }, euro(r.subtotale_prodotti)), el("td", { class: "num" }, euro(r.costi_comuni)), el("td", { class: "num totale" }, euro(r.totale))))));
+    $("risultato").classList.remove("nascosto");
+  } catch (e) { messaggio(e.message); }
+}
+$("calcola").addEventListener("click", calcola);
+document.querySelectorAll("input[name=criterio]").forEach((r) => r.addEventListener("change", () => { if (stato.risultato) calcola(); }));
+$("esporta").addEventListener("click", async () => {
+  try {
+    const r = await api("/pdf", json(richiesta()));
+    const nome = /filename="([^"]+)"/.exec(r.headers.get("content-disposition") || "")?.[1] || "riepilogo.pdf";
+    const a = el("a", { href: URL.createObjectURL(await r.blob()), download: nome });
+    document.body.append(a); a.click(); a.remove();
+  } catch (e) { messaggio(e.message); }
+});
+scuro.addEventListener("change", disegna);
+
+caricaModelli();
+caricaRubrica().catch((e) => messaggio(e.message));
+</script>
+</body>
+</html>
