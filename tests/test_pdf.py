@@ -90,3 +90,16 @@ def test_il_pdf_non_si_genera_con_unita_non_assegnate(client: TestClient) -> Non
     corpo = richiesta()
     corpo["assegnazioni"].pop()
     assert client.post("/pdf", json=corpo).status_code == 422
+
+
+def test_il_markup_nei_nomi_viene_stampato_come_testo(client: TestClient, tmp_path: Any) -> None:
+    # Un nome estratto da un documento malevolo non deve poter includere file locali nel PDF
+    corpo = richiesta()
+    segreto = tmp_path / "segreto.png"
+    corpo["ordine"]["prodotti"][0]["nome"] = f'<img src="{segreto}" width="10" height="10"/>Carta'
+    corpo["ordine"]["prodotti"][0]["dettagli"] = "<b>NM</b> & foil"
+    corpo["ordine"]["ordine"]["venditore"] = "<font color='red'>Venditore</font>"
+    testo = pagine(client, corpo)
+    assert f'<img src="{segreto}"' in testo[1].replace("\n", "")
+    assert "<b>NM</b> & foil" in testo[1]
+    assert "<font color='red'>Venditore</font>" in testo[0]

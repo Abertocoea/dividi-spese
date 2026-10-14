@@ -2,12 +2,13 @@
 import io
 import re
 from datetime import date
+from xml.sax.saxutils import escape
 from collections.abc import Sequence
 from typing import Any
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.styles import ParagraphStyle, PropertySet, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import Flowable, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
@@ -41,6 +42,11 @@ def genera(ordine: OrdineEstratto, ripartizione: Ripartizione) -> bytes:
     return buffer.getvalue()
 
 
+def _testo(valore: str, stile: PropertySet = TESTO) -> Paragraph:
+    """Paragraph interpreta il markup: i testi che vengono dal documento vanno sempre escapati."""
+    return Paragraph(escape(valore), stile)
+
+
 def _intestazione_ordine(ordine: OrdineEstratto) -> str:
     dati = ordine.ordine
     parti = []
@@ -68,7 +74,7 @@ def _sintesi(ordine: OrdineEstratto, ripartizione: Ripartizione) -> list[Flowabl
     costi = [[c.descrizione, euro(c.importo)] for c in ordine.costi_comuni] or [["Nessun costo comune", ""]]
     return [
         Paragraph("Riepilogo spese", TITOLO),
-        Paragraph(_intestazione_ordine(ordine), TESTO),
+        _testo(_intestazione_ordine(ordine)),
         Paragraph(f"Totale dell'ordine: <b>{euro(ripartizione.totale)}</b>", TESTO),
         Spacer(1, 6 * mm),
         _tabella(righe, larghezze=[60, 38, 38, 38], totale=True),
@@ -85,15 +91,15 @@ def _recap(ordine: OrdineEstratto, persona: QuotaPersona) -> list[Flowable]:
     for prodotto in persona.prodotti:
         unita = prodotto.unita
         quantita = f"{unita} di {prodotto.unita_riga}" if unita != prodotto.unita_riga else str(unita)
-        righe.append([quantita, Paragraph(prodotto.nome, TESTO), Paragraph(prodotto.dettagli, PICCOLO), euro(prodotto.prezzo_unitario), euro(prodotto.totale)])
+        righe.append([quantita, _testo(prodotto.nome), _testo(prodotto.dettagli, PICCOLO), euro(prodotto.prezzo_unitario), euro(prodotto.totale)])
     conti = [
         ["Subtotale prodotti", euro(persona.subtotale)],
         ["Quota costi comuni", euro(persona.quota_costi_comuni)],
         ["Totale da pagare", euro(persona.totale)],
     ]
     return [
-        Paragraph(f"Recap di {persona.nome}", TITOLO),
-        Paragraph(_intestazione_ordine(ordine), TESTO),
+        _testo(f"Recap di {persona.nome}", TITOLO),
+        _testo(_intestazione_ordine(ordine)),
         Paragraph("Controlla che questi siano i prodotti che hai preso.", PICCOLO),
         Spacer(1, 6 * mm),
         _tabella(righe, larghezze=[18, 70, 42, 22, 22]),

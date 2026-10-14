@@ -1,9 +1,12 @@
 """API HTTP: unico punto di ingresso del frontend."""
 from importlib.resources import files
 from pathlib import Path
+from urllib.parse import urlsplit
 
-from fastapi import FastAPI, File, Form, HTTPException, Response, UploadFile
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.responses import HTMLResponse, JSONResponse
+from starlette.middleware.base import RequestResponseEndpoint
 from pydantic import BaseModel, Field, field_validator
 
 from .coerenza import Coerenza, verifica
@@ -41,8 +44,22 @@ class ElencoNomi(BaseModel):
     nomi: list[str]
 
 
+HOST_LOCALI = ["127.0.0.1", "localhost"]
+
+
 def crea_app(estrattore: Estrattore, cartella_dati: Path) -> FastAPI:
     app = FastAPI(title="Dividi Spese")
+    # Il server è raggiungibile da qualsiasi pagina aperta nel browser: si accettano solo richieste
+    # indirizzate a localhost (contro il DNS rebinding) e provenienti dalla pagina dell'app (contro il CSRF).
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=HOST_LOCALI)
+
+    @app.middleware("http")
+    async def solo_dalla_pagina_dell_app(request: Request, call_next: RequestResponseEndpoint) -> Response:
+        origine = request.headers.get("origin")
+        if origine is not None and urlsplit(origine).hostname not in HOST_LOCALI:
+            return JSONResponse({"detail": "Richiesta da un altro sito rifiutata"}, status_code=403)
+        return await call_next(request)
+
     rubrica = Rubrica(cartella_dati)
 
     @app.get("/", response_class=HTMLResponse, include_in_schema=False)

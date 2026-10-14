@@ -9,6 +9,7 @@ from dividi_spese.app import crea_app
 from dividi_spese.estrazione import ContenutoDocumento
 
 FIXTURES = Path(__file__).parent / "fixtures"
+URL_APP = "http://127.0.0.1:8765"
 
 
 class EstrattoreFinto:
@@ -62,14 +63,14 @@ def estrattore() -> EstrattoreFinto:
 
 @pytest.fixture
 def client(estrattore: EstrattoreFinto, tmp_path: Path) -> Iterator[TestClient]:
-    with TestClient(crea_app(estrattore=estrattore, cartella_dati=tmp_path)) as c:
+    with TestClient(crea_app(estrattore=estrattore, cartella_dati=tmp_path), base_url=URL_APP) as c:
         yield c
 
 
 @pytest.fixture
 def nuovo_client(estrattore: EstrattoreFinto, tmp_path: Path) -> Callable[[], TestClient]:
     """Crea un'altra istanza dell'app sulla stessa cartella dati (simula un riavvio)."""
-    return lambda: TestClient(crea_app(estrattore=estrattore, cartella_dati=tmp_path))
+    return lambda: TestClient(crea_app(estrattore=estrattore, cartella_dati=tmp_path), base_url=URL_APP)
 
 
-__all__ = ["EstrattoreFinto", "output_grezzo", "FIXTURES"]
+__all__ = ["EstrattoreFinto", "output_grezzo", "FIXTURES", "URL_APP"]

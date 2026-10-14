@@ -13,7 +13,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from conftest import FIXTURES
+from conftest import FIXTURES, URL_APP
 from dividi_spese.app import crea_app
 from dividi_spese.ollama import EstrattoreOllama
 
@@ -33,7 +33,7 @@ def client(tmp_path_factory: pytest.TempPathFactory) -> Iterator[TestClient]:
         httpx.get("http://localhost:11434/api/version", timeout=2)
     except httpx.HTTPError:
         pytest.skip("Ollama non è avviato")
-    with TestClient(crea_app(EstrattoreOllama(), tmp_path_factory.mktemp("dati"))) as c:
+    with TestClient(crea_app(EstrattoreOllama(), tmp_path_factory.mktemp("dati")), base_url=URL_APP) as c:
         yield c
 
 
